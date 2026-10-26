@@ -1638,38 +1638,56 @@ pub fn search(
                 hits.into_iter().skip(request.offset).take(limit).collect()
             }
             Sort::RunCount => {
-                let mut hits: Vec<u32> = match &bits {
-                    Some(bits) => bits.ones_iter().map(|i| i as u32).collect(),
-                    None => (0..table.len() as u32).collect(),
-                };
-                // The counter is not in the index, so pay one path lookup per
-                // match up front; comparisons then touch only the small
-                // counter table. Without counts everything is zero and the
-                // row order (path order) decides, like an empty column.
-                let count: std::collections::HashMap<u32, u32> = hits
+                // The counter store is small (pruned at 5,000 paths) and the
+                // index is not: find each counted path with a binary search
+                // instead of rebuilding the path of every match. Sorting the
+                // whole index would walk it twice, and this order is what the
+                // window opens with, so an empty query would pay that price on
+                // every launch. Rows without a counter keep path order.
+                let mut counted: Vec<(u32, u32)> = counts_map
                     .iter()
-                    .filter_map(|i| counts_map.get(&table.path(*i as usize)).map(|c| (*i, *c)))
+                    .filter_map(|(path, count)| {
+                        let i = table.lower_bound(path);
+                        (i < table.len()
+                            && table.path(i).as_slice() == path.as_slice()
+                            && wanted(i))
+                        .then_some((*count, i as u32))
+                    })
                     .collect();
-                let compare = |a: &u32, b: &u32| {
-                    let order = count
-                        .get(a)
-                        .copied()
-                        .unwrap_or(0)
-                        .cmp(&count.get(b).copied().unwrap_or(0))
-                        .then(a.cmp(b));
-                    if request.descending {
-                        order.reverse()
-                    } else {
-                        order
-                    }
-                };
-                let needed = request.offset.saturating_add(limit).min(total);
-                if needed < hits.len() {
-                    hits.select_nth_unstable_by(needed, compare);
-                    hits.truncate(needed);
+                counted.sort_unstable();
+                if request.descending {
+                    counted.reverse();
                 }
-                hits.sort_unstable_by(compare);
-                hits.into_iter().skip(request.offset).take(limit).collect()
+                let counted_rows: std::collections::HashSet<u32> =
+                    counted.iter().map(|&(_, i)| i).collect();
+                let needed = request.offset.saturating_add(limit).min(total);
+                let mut ordered: Vec<u32> = Vec::new();
+                if request.descending {
+                    ordered.extend(counted.iter().map(|&(_, i)| i).take(needed));
+                }
+                if ordered.len() < needed {
+                    let uncounted: Box<dyn Iterator<Item = u32> + '_> = match &bits {
+                        Some(bits) => Box::new(bits.ones_iter().map(|i| i as u32)),
+                        None => Box::new(0..table.len() as u32),
+                    };
+                    for i in uncounted {
+                        if counted_rows.contains(&i) {
+                            continue;
+                        }
+                        ordered.push(i);
+                        if ordered.len() == needed {
+                            break;
+                        }
+                    }
+                }
+                if !request.descending && ordered.len() < needed {
+                    ordered.extend(counted.iter().map(|&(_, i)| i).take(needed - ordered.len()));
+                }
+                ordered
+                    .into_iter()
+                    .skip(request.offset)
+                    .take(limit)
+                    .collect()
             }
         }
     };

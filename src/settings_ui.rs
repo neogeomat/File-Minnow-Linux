@@ -1343,7 +1343,7 @@ fn search_here() -> gtk::Box {
     );
     if crate::file_ops::confined() {
         section.pack_start(
-            &caption("Not available in the snap package, which cannot change other applications' settings."),
+            &caption("Not available in a confined install, which cannot change other applications' settings."),
             false,
             false,
             0,

@@ -21,14 +21,14 @@ parser.add_argument('--output', default='artifacts/ui')
 parser.add_argument('--tray', action='store_true')
 parser.add_argument('--daemon-first', action='store_true')
 parser.add_argument('--portal', action='store_true', help='Test the Wayland shortcut protocol with a private fixture; rendering still uses Xvfb')
-parser.add_argument('--confined', action='store_true', help='Run as a snap would: files open, show and trash through the (fixture) desktop portal')
+parser.add_argument('--confined', action='store_true', help='Run confined: files open, show and trash through the (fixture) desktop portal')
 args = parser.parse_args()
 if os.environ.get('MINNOW_PRIVATE_TEST_SESSION') != '1':
     # The GTK file chooser can start GVfs in the private session; keep its
     # FUSE mount out of the temporary directory so cleanup works.
     with tempfile.TemporaryDirectory(prefix='minnow-private-session-', ignore_cleanup_errors=True) as isolated:
         private_env=os.environ.copy()
-        for name,folder in [('XDG_RUNTIME_DIR','runtime'),('XDG_CONFIG_HOME','config'),('XDG_DATA_HOME','data'),('XDG_CACHE_HOME','cache')]:
+        for name,folder in [('XDG_RUNTIME_DIR','runtime'),('XDG_CONFIG_HOME','config'),('XDG_CONFIG_DIRS','config-system'),('XDG_DATA_HOME','data'),('XDG_CACHE_HOME','cache')]:
             path=Path(isolated)/folder;path.mkdir(mode=0o700);private_env[name]=str(path)
         private_env.update(MINNOW_PRIVATE_TEST_SESSION='1',GIO_USE_VFS='local',GTK_USE_PORTAL='0',GVFS_DISABLE_FUSE='1')
         result=subprocess.run(['dbus-run-session','--',sys.executable,__file__,*sys.argv[1:]],env=private_env)
@@ -317,11 +317,11 @@ try:
             time.sleep(.3)
         target = files / 'lib.rs'
         if args.confined:
-            # A snap cannot run the file manager's actions, list the desktop's
+            # A confined install cannot run the file manager's actions, list the desktop's
             # applications or call the file manager: the portal does it.
             right_click_first('z')
             time.sleep(.5)
-            assert not (marker / 'lib.rs').exists(), 'Nemo action offered in a snap'
+            assert not (marker / 'lib.rs').exists(), 'Nemo action offered in a confined install'
             xdo('key', 'Escape')
             desktop_portal = __import__('dbus').SessionBus().get_object('org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop')
             def portal_file_calls():
@@ -342,7 +342,7 @@ try:
             while subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', '^File Properties$'], env=env, capture_output=True).returncode == 0:
                 assert time.monotonic() < deadline, 'Properties summary did not close'
                 time.sleep(.05)
-            assert not (marker / 'opened').exists(), 'a host application started from the snap'
+            assert not (marker / 'opened').exists(), 'a host application started from a confined install'
         else:
             right_click_first('z')  # the private Nemo action fixture
             deadline = time.monotonic() + 5
@@ -527,7 +527,7 @@ try:
         # View menu: Preview Pane on, Items and Created columns on; all remembered.
         xdo('windowfocus', '--sync', window)
         xdo('mousemove', '--window', window, '150', '107', 'click', '1')
-        for keys in [['End', 'Up'], ['End', 'Up', 'Up'], ['End', 'Up', 'Up', 'Up']]:
+        for keys in [['End', 'Up'], ['End', 'Up', 'Up'], ['End', 'Up', 'Up', 'Up', 'Up']]:
             xdo('key', 'alt+v')
             time.sleep(.4)
             xdo('key', *keys, 'Return')

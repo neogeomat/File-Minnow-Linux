@@ -182,6 +182,8 @@ fn run_count_sort_and_page_counts() {
         counts.record(std::path::Path::new("/fixture/c"));
     }
     counts.record(std::path::Path::new("/fixture/a"));
+    // Counted paths that are no longer indexed are skipped, not counted.
+    counts.record(std::path::Path::new("/fixture/gone"));
     let req = SearchRequest {
         sort: Sort::RunCount,
         descending: true,
@@ -194,6 +196,23 @@ fn run_count_sort_and_page_counts() {
     let names: Vec<Vec<u8>> = r.entries.iter().map(|x| x.name().to_vec()).collect();
     assert_eq!(names, [b"c".to_vec(), b"a".to_vec(), b"b".to_vec()]);
     assert_eq!(r.counts, vec![3, 1, 0]);
+    // Paging walks the counted rows first and spills into the rest.
+    let page = |offset: usize| {
+        let req = SearchRequest {
+            sort: Sort::RunCount,
+            descending: true,
+            limit: 1,
+            offset,
+            ..Default::default()
+        };
+        let r = query::search(&s, &req, None, Some(&counts)).unwrap();
+        let name = r.entries.first().map(|x| x.name().to_vec());
+        (name, r.counts)
+    };
+    assert_eq!(page(0), (Some(b"c".to_vec()), vec![3]));
+    assert_eq!(page(1), (Some(b"a".to_vec()), vec![1]));
+    assert_eq!(page(2), (Some(b"b".to_vec()), vec![0]));
+    assert_eq!(page(3), (None, Vec::new()));
     // Ascending: the never-used row comes first.
     let req = SearchRequest {
         sort: Sort::RunCount,
@@ -203,6 +222,8 @@ fn run_count_sort_and_page_counts() {
     };
     let r = query::search(&s, &req, None, Some(&counts)).unwrap();
     assert_eq!(r.counts, vec![0, 1, 3]);
+    let names: Vec<Vec<u8>> = r.entries.iter().map(|x| x.name().to_vec()).collect();
+    assert_eq!(names, [b"b".to_vec(), b"a".to_vec(), b"c".to_vec()]);
     // Without a counter store the page carries no counts.
     let r = query::search(&s, &req, None, None).unwrap();
     assert!(r.counts.is_empty());

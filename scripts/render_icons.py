@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Renders packaging/file-minnow.svg to the PNG sizes the app embeds and the
-package installs, and copies the SVG to the snap.
+package installs.
 
 Run after changing the icon: python3 scripts/render_icons.py
 Needs Python's gi with GdkPixbuf and its SVG loader (librsvg).
 """
-import shutil
 from pathlib import Path
 
 import gi
@@ -22,8 +21,7 @@ def main():
         pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(str(SVG), size, size)
         assert (pixbuf.get_width(), pixbuf.get_height()) == (size, size) and pixbuf.get_has_alpha()
         pixbuf.savev(str(ROOT / f'packaging/icons/file-minnow-{size}.png'), 'png', [], [])
-    shutil.copyfile(SVG, ROOT / 'snap/gui/file-minnow.svg')
-    print(f'Rendered {len(SIZES)} sizes and updated the snap icon')
+    print(f'Rendered {len(SIZES)} sizes')
 
 
 if __name__ == '__main__':

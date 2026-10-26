@@ -62,59 +62,38 @@ python3 scripts/package.py --binary dist/build/file-minnow
 The script reads the binary's architecture and required glibc version, and writes the
 package, a portable archive and `dist/manifest.json` with checksums. Pass
 `--maintainer 'Name <email>'` for a public release. Installing or removing the package
-never starts the application, enables autostart, or deletes user settings and indexes.
-Remove it with `sudo apt remove file-minnow`.
+never starts the application or deletes user settings and indexes. The package does
+install an autostart entry; turn it off in **Options → Interface**. Remove the package
+with `sudo apt remove file-minnow`.
 
 ## Portable archive (other glibc distributions)
 
 `scripts/package.py --format tar` produces `file-minnow-<version>-linux-<arch>.tar.gz`
-with the same `usr/` layout as the package. Run `usr/bin/file-minnow` directly, or copy
-the files as in "Install for your user only". The runtime needs GTK 3 (normally
+with the same `usr/` and `etc/` layout as the package. Run `usr/bin/file-minnow`
+directly, or copy the files as in "Install for your user only". The runtime needs GTK 3 (normally
 installed with any desktop), a user D-Bus session for the tray and portals, and
 `xdg-open`.
 
 A glibc build does not run on musl-based systems such as Alpine; build from source
 there.
 
-## Snap
-
-`snap/snapcraft.yaml` builds a strictly confined snap (core22 base, GNOME extension).
-`.github/workflows/snap.yml` builds it in a clean LXD container, installs it and runs a
-search with it; a published GitHub release also uploads it to the Snap Store when the
-repository has a `SNAPCRAFT_STORE_CREDENTIALS` secret. To build it yourself, run
-`snapcraft pack` (it needs snapd and LXD or Multipass).
-
-A confined snap works differently from the package:
-
-- It can index your **home folder**, except hidden files and folders directly inside it
-  (`~/.config`, `~/.cache`…). Drives under `/media`, `/run/media` and `/mnt` need
-  `snap connect file-minnow:removable-media`. Recognising network folders and drives
-  being plugged in needs `snap connect file-minnow:mount-observe`. System folders such
-  as `/usr` or `/etc` belong to the snap's own runtime, so indexing them is not useful.
-- Open, Open With, Open Containing Folder and Move to Trash go through the desktop
-  portal (`xdg-desktop-portal`). Open in Terminal and the file manager's custom actions
-  are not offered, because a snap cannot start the computer's other programs. Properties
-  shows File Minnow's own summary.
-- **Start at login** works as usual; snapd starts the app with your session.
-- Results in GNOME's overview and KRunner, and adding **Search Here** to file managers,
-  are not available: a snap cannot install them.
-- Thumbnails are made only for pictures, and kept in the snap's own cache.
-- The index is kept in `~/snap/file-minnow/common/.cache/file-minnow` and the settings in
-  `~/snap/file-minnow/current/.config/file-minnow`, separate from a package install.
-
 ## Starting automatically
 
-Choose one of these, or neither:
+The `.deb` installs `/etc/xdg/autostart/file-minnow.desktop`, which starts
+`file-minnow gui --hidden` when you log in. Without a working tray the window stays
+visible. Turn it off in **Options → Interface → Start File Minnow at login**; the app
+then writes a per-user override (`Hidden=true`), so it stays off for your account
+without affecting other users. If you extract the portable archive for your user, no
+system-wide entry is installed: the same option writes
+`~/.config/autostart/file-minnow.desktop` for your account only.
 
-- **Window in the tray at login.** Tick **Options → Interface → Start File Minnow at login**.
-  This writes `~/.config/autostart/file-minnow.desktop`, which starts `file-minnow gui --hidden`;
-  without a working tray the window stays visible. Untick it to remove the entry.
-- **Background index service.** The package installs a systemd *user* unit but does not
-  enable it. Enable it with `systemctl --user enable --now file-minnow.service`; the window
-  attaches to it when opened. Without systemd, start `file-minnow daemon` with your
-  session's autostart mechanism.
+The background index service is separate and remains opt-in. The package installs a
+systemd *user* unit but does not enable it. Enable it with
+`systemctl --user enable --now file-minnow.service`; the window attaches to it when
+opened. Without systemd, start `file-minnow daemon` with your session's autostart
+mechanism.
 
-Enabling both is only useful if you want the index to keep running after the window
+Running both is only useful if you want the index to keep running after the window
 quits.
 
 ## File manager integration

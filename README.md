@@ -28,7 +28,7 @@ File Minnow is built for exactly that.
   search box for a list.
 - **Accent- and case-insensitive.** Typing `stiinta` finds `Știință`, `ecole` finds `École`.
 - **Native desktop app.** It follows your GTK theme, fonts and file icons. Matches are
-  highlighted; columns (name, path, size, modified, type, created, items) sort naturally
+  highlighted; columns (name, path, size, modified, type, created, run count, items) sort naturally
   and can be hidden; folders show the total size and number of what is inside them; a
   thumbnail grid and an optional preview pane show pictures, videos and documents.
 - **Saved searches.** Bookmarks, search history with completion, your own filters in the
@@ -69,24 +69,10 @@ Get the latest `.deb` or portable archive from
 sudo apt install ./file-minnow_*_amd64.deb
 ```
 
-The `.deb` works on Ubuntu 22.04+, Linux Mint 21+, Debian 12+ and their derivatives. The
+The `.deb` works on Ubuntu 22.04+, Linux Mint 21+, Debian 12+ and their derivatives. It
+starts File Minnow in the tray at login; turn that off in **Options → Interface**. The
 portable `.tar.gz` runs on other 64-bit glibc distributions with GTK 3 (Fedora, openSUSE,
 Arch…).
-
-### Snap Store
-
-[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/file-minnow)
-
-```bash
-sudo snap install file-minnow
-sudo snap connect file-minnow:removable-media   # optional: USB drives under /media and /mnt
-sudo snap connect file-minnow:mount-observe     # optional: recognise drives and network folders
-```
-
-The snap is sandboxed: it searches your home folder (but not hidden folders directly
-inside it, such as `~/.config`) and, once connected, removable drives. Open in Terminal
-and your file manager's custom actions are not available in it. For whole-system search,
-use the `.deb` or the portable archive. See [docs/install.md](docs/install.md#snap).
 
 ### Build from source
 

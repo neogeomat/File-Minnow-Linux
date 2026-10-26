@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 
-/// Window size, position, maximized state, column widths and sort order.
+/// Window size, position, maximized state and column widths.
 /// Kept apart from the settings file: it changes often and must not race
 /// with an open Options dialog.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -37,8 +37,6 @@ struct WindowMemory {
     y: Option<i32>,
     maximized: bool,
     columns: Vec<i32>,
-    sort: Option<Sort>,
-    descending: bool,
     /// The type filter's search macro (`pic:`...), empty for all.
     filter: String,
     /// Columns switched off in the View menu (Name cannot be hidden).
@@ -66,8 +64,6 @@ impl Default for WindowMemory {
             y: None,
             maximized: false,
             columns: Vec::new(),
-            sort: None,
-            descending: false,
             filter: String::new(),
             hidden_columns: default_hidden(),
             preview: false,
@@ -295,6 +291,8 @@ pub(crate) struct App {
     pending: bool,
     sort: Sort,
     descending: bool,
+    /// False once a daemon from before run counts rejects the sort.
+    run_sort_supported: bool,
     offset: usize,
     last_generation: u64,
     tray_available: bool,
@@ -323,7 +321,8 @@ pub(crate) struct App {
     highlight: Rc<RefCell<Vec<Vec<u8>>>>,
     /// Roots whose drive or share is unavailable; their rows are greyed.
     offline: Rc<RefCell<Vec<Vec<u8>>>>,
-    /// Result columns in order (Name, Path, Size, Modified, Type, Created, Items).
+    /// Result columns in order (Name, Path, Size, Modified, Type, Created,
+    /// Run count, Items).
     columns: Vec<gtk::TreeViewColumn>,
     history: History,
     /// Model behind the search box's completion: the history, newest first.
@@ -783,8 +782,9 @@ pub fn run_with_options(roots: Vec<PathBuf>, dir: PathBuf, launch: LaunchOptions
         options: None,
         applying: false,
         pending: false,
-        sort: Sort::Name,
-        descending: false,
+        sort: Sort::RunCount,
+        descending: true,
+        run_sort_supported: true,
         offset: 0,
         last_generation: u64::MAX,
         tray_available: false,
@@ -1019,11 +1019,12 @@ fn restore_window(app: &AppRef) {
             column.set_fixed_width(*width);
         }
     }
-    if let Some(sort) = memory.sort {
-        a.sort = sort;
-        a.descending = memory.descending;
-        a.show_sort();
-    }
+    // Results open by run count, most-used first, on every launch; a column
+    // sort clicked during the session is not carried over. A daemon too old
+    // for the sort makes the first search fall back to name order.
+    a.sort = Sort::RunCount;
+    a.descending = true;
+    a.show_sort();
     if !memory.filter.is_empty() {
         a.filter.set_active_id(Some(&memory.filter));
     }
@@ -1152,8 +1153,8 @@ const COLUMNS: [(&str, i32, Sort); 8] = [
     ("Modified", 155, Sort::Modified),
     ("Type", 140, Sort::Type),
     ("Created", 155, Sort::Created),
-    ("Items", 70, Sort::Items),
     ("Run count", 75, Sort::RunCount),
+    ("Items", 70, Sort::Items),
 ];
 fn build_columns(app: &AppRef) {
     let mut a = app.borrow_mut();
@@ -1247,15 +1248,15 @@ fn build_columns(app: &AppRef) {
                     3 => modified(e),
                     4 => type_name(&types, e),
                     5 => created(e),
-                    // How many files and folders a folder holds, at any depth.
-                    6 => match e.kind {
-                        Kind::Folder => count(e.items as usize),
-                        _ => String::new(),
-                    },
                     // Times the file was opened or launched through the app.
                     // Blank when never used or when results carry no counters.
-                    _ => match r.counts.get(i as usize) {
+                    6 => match r.counts.get(i as usize) {
                         Some(c) if *c > 0 => count(*c as usize),
+                        _ => String::new(),
+                    },
+                    // How many files and folders a folder holds, at any depth.
+                    _ => match e.kind {
+                        Kind::Folder => count(e.items as usize),
                         _ => String::new(),
                     },
                 };
@@ -1832,7 +1833,7 @@ fn popup(w: &AppWeak, event: Option<&gdk::EventButton>) {
         on(|a| a.open_selected(false)),
     );
     // Open With: the desktop's applications for this type, default first.
-    // A snap sees only its own applications; the portal asks instead.
+    // A confined install sees only its own applications; the portal asks instead.
     let kind = items[0].mime.clone();
     if file_ops::confined() {
         if items.len() == 1 {
@@ -2475,6 +2476,15 @@ impl App {
                 }
                 self.window.move_(x, y);
             }
+            // Every time the window comes back from the tray it opens by run
+            // count again, like a fresh launch.
+            if self.run_sort_supported && (self.sort, self.descending) != (Sort::RunCount, true) {
+                self.sort = Sort::RunCount;
+                self.descending = true;
+                self.offset = 0;
+                self.show_sort();
+                self.schedule();
+            }
         }
         self.window.show_all();
         if self
@@ -2574,8 +2584,6 @@ impl App {
             timer.remove();
         }
         self.memory.columns = self.tree.columns().iter().map(|c| c.width()).collect();
-        self.memory.sort = Some(self.sort);
-        self.memory.descending = self.descending;
         self.memory.filter = self.filter.active_id().unwrap_or_default().into();
         if WindowMemory::load(&self.memory_path) != self.memory
             && let Ok(json) = serde_json::to_vec_pretty(&self.memory)
@@ -2979,8 +2987,21 @@ impl App {
                     Err(error) => {
                         a.pending = false;
                         a.spinner.stop();
-                        a.status.set_text(&error);
-                        a.publish();
+                        // A daemon from before run counts cannot parse the
+                        // sort; keep name order instead of an empty window.
+                        if a.sort == Sort::RunCount && error.contains("RunCount") {
+                            a.run_sort_supported = false;
+                            a.sort = Sort::Name;
+                            a.descending = false;
+                            a.offset = 0;
+                            a.show_sort();
+                            a.schedule();
+                            a.status
+                                .set_text("Restart the daemon to sort by run count.");
+                        } else {
+                            a.status.set_text(&error);
+                            a.publish();
+                        }
                     }
                 }
             }
@@ -3068,7 +3089,7 @@ impl App {
             }
             Message::Trashed(moved, text) => {
                 let mut a = app.borrow_mut();
-                // Items trashed through the portal (a snap) cannot be put back.
+                // Items trashed through the portal (a confined install) cannot be put back.
                 if !moved.is_empty() && !file_ops::confined() {
                     a.push_undo(Undo::Trashed(moved));
                 }

@@ -28,15 +28,17 @@ pub fn guess_type(name: &Path) -> (glib::GString, bool) {
     }
 }
 
-/// Whether File Minnow runs as a confined snap. A snap cannot start the
+/// Whether File Minnow runs confined. A confined app cannot start the
 /// computer's other programs or call the file manager directly, so opening
 /// files, showing them in their folder and the trash go through the desktop
-/// portals, and menu entries that run programs are left out.
+/// portals, and menu entries that run programs are left out. Portal-confined
+/// builds and the `--confined` UI test set `SNAP` to exercise this path.
 pub fn confined() -> bool {
     std::env::var_os("SNAP").is_some()
 }
 
-/// The user's home folder. In a snap, `HOME` is the snap's own folder.
+/// The user's home folder. In a confined install, `HOME` may be the app's own
+/// folder, so prefer `SNAP_REAL_HOME`.
 pub fn real_home() -> Option<PathBuf> {
     std::env::var_os("SNAP_REAL_HOME")
         .or_else(|| std::env::var_os("HOME"))
@@ -101,10 +103,34 @@ pub fn autostart_path() -> Option<PathBuf> {
     Some(config.join("autostart/file-minnow.desktop"))
 }
 
-/// Whether File Minnow starts at login: our entry exists and is not
-/// switched off by the desktop's own startup settings.
+/// The system-wide autostart entries from `XDG_CONFIG_DIRS` (default
+/// `/etc/xdg`). The Debian package installs one, so it applies to every user
+/// until a user entry of the same name overrides it.
+fn system_autostart_paths() -> Vec<PathBuf> {
+    std::env::var_os("XDG_CONFIG_DIRS")
+        .filter(|dirs| !dirs.is_empty())
+        .map(|dirs| std::env::split_paths(&dirs).collect::<Vec<_>>())
+        .unwrap_or_else(|| vec![PathBuf::from("/etc/xdg")])
+        .into_iter()
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join("autostart/file-minnow.desktop"))
+        .collect()
+}
+
+/// Whether File Minnow starts at login: a user entry, or the package's
+/// system-wide entry when the user has not written one, is present and not
+/// switched off.
 pub fn autostart_enabled() -> bool {
-    autostart_path().is_some_and(|p| autostart_enabled_at(&p))
+    let Some(user) = autostart_path() else {
+        return false;
+    };
+    autostart_enabled_with(&user, &system_autostart_paths())
+}
+fn autostart_enabled_with(user: &Path, system: &[PathBuf]) -> bool {
+    if user.is_file() {
+        return autostart_enabled_at(user);
+    }
+    system.iter().any(|path| autostart_enabled_at(path))
 }
 fn autostart_enabled_at(path: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else {
@@ -142,14 +168,33 @@ fn exec_arg(arg: &str) -> String {
 /// the default.
 pub fn set_autostart(enabled: bool, data_dir: Option<&Path>) -> Result<()> {
     let path = autostart_path().context("Cannot find the autostart folder")?;
-    set_autostart_at(&path, enabled, data_dir)
+    let system_present = system_autostart_paths().iter().any(|path| path.exists());
+    set_autostart_with_system(&path, enabled, data_dir, system_present)
 }
+#[cfg(test)]
 fn set_autostart_at(path: &Path, enabled: bool, data_dir: Option<&Path>) -> Result<()> {
+    set_autostart_with_system(path, enabled, data_dir, false)
+}
+/// `system_present` says whether the package installed the system-wide entry.
+/// Disabling then writes a user override with `Hidden=true`; removing our
+/// user file would let the system entry apply again.
+fn set_autostart_with_system(
+    path: &Path,
+    enabled: bool,
+    data_dir: Option<&Path>,
+    system_present: bool,
+) -> Result<()> {
     if !enabled {
-        match std::fs::remove_file(path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
-            _ => return Ok(()),
+        if !system_present {
+            match std::fs::remove_file(path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+                _ => return Ok(()),
+            }
         }
+        return write_autostart(
+            path,
+            "[Desktop Entry]\nType=Application\nName=File Minnow\nHidden=true\nX-GNOME-Autostart-enabled=false\n",
+        );
     }
     let exe = std::env::current_exe().context("Cannot locate the File Minnow program")?;
     let on_path = crate::actions::find_program("file-minnow")
@@ -167,6 +212,9 @@ fn set_autostart_at(path: &Path, enabled: bool, data_dir: Option<&Path>) -> Resu
     let entry = format!(
         "[Desktop Entry]\nType=Application\nName=File Minnow\nComment=Start file search in the background\nExec={exec} gui --hidden\nIcon=file-minnow\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
     );
+    write_autostart(path, &entry)
+}
+fn write_autostart(path: &Path, entry: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -387,7 +435,7 @@ pub fn bus_has_owner(name: &str) -> bool {
 /// Nautilus, Caja, Dolphin, Thunar...) to show items selected in their
 /// folder (`ShowItems`) or their properties window (`ShowItemProperties`).
 /// `done(false)` when no file manager answered, so callers can fall back.
-/// A snap may not call it.
+/// A confined install may not call it.
 pub fn file_manager(method: &str, paths: &[PathBuf], done: impl FnOnce(bool) + 'static) {
     if confined() {
         done(false);
@@ -444,6 +492,29 @@ mod tests {
         set_autostart_at(&path, false, None).unwrap();
         assert!(!path.exists());
         set_autostart_at(&path, false, None).unwrap();
+    }
+
+    #[test]
+    fn system_autostart_is_overridden_by_the_user_entry() {
+        let temp = tempfile::tempdir().unwrap();
+        let system = temp.path().join("etc/xdg/autostart/file-minnow.desktop");
+        let user = temp.path().join("config/autostart/file-minnow.desktop");
+        std::fs::create_dir_all(system.parent().unwrap()).unwrap();
+        std::fs::write(
+            &system,
+            "[Desktop Entry]\nType=Application\nName=File Minnow\nX-GNOME-Autostart-enabled=true\n",
+        )
+        .unwrap();
+        assert!(autostart_enabled_with(&user, std::slice::from_ref(&system)));
+        set_autostart_with_system(&user, false, None, true).unwrap();
+        let text = std::fs::read_to_string(&user).unwrap();
+        assert!(text.contains("Hidden=true"), "{text}");
+        assert!(!autostart_enabled_with(
+            &user,
+            std::slice::from_ref(&system)
+        ));
+        set_autostart_with_system(&user, true, None, true).unwrap();
+        assert!(autostart_enabled_with(&user, std::slice::from_ref(&system)));
     }
 
     #[test]

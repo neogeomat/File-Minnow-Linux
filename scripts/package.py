@@ -64,7 +64,9 @@ with tempfile.TemporaryDirectory(prefix='file-minnow-package-') as temp:
     put(ROOT / 'packaging/org.fileminnow.FileMinnow.search-provider.ini', 'usr/share/gnome-shell/search-providers/org.fileminnow.FileMinnow.search-provider.ini')
     put(ROOT / 'packaging/file-minnow-krunner.desktop', 'usr/share/krunner/dbusplugins/file-minnow.desktop')
     put(ROOT / 'packaging/org.fileminnow.FileMinnow.SearchProvider.service', 'usr/share/dbus-1/services/org.fileminnow.FileMinnow.SearchProvider.service')
-    put(ROOT / 'packaging/file-minnow-autostart.desktop', 'usr/share/doc/file-minnow/file-minnow-autostart.desktop')
+    # Start in the tray at login for every user. The app's "Start at login"
+    # option writes a per-user entry (or a Hidden=true override) on top.
+    put(ROOT / 'packaging/file-minnow-autostart.desktop', 'etc/xdg/autostart/file-minnow.desktop')
     put(ROOT / 'LICENSE', 'usr/share/doc/file-minnow/copyright')
     put(ROOT / 'docs/manual.md', 'usr/share/doc/file-minnow/README.md')
     if (ROOT / 'docs/install.md').exists():
@@ -86,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='file-minnow-package-') as temp:
         # these packages (the t64 transition) still provide the names below.
         dependencies = [f'libc6 (>= {minimum_glibc})' if minimum_glibc else 'libc6', 'libgcc-s1', 'libgtk-3-0 (>= 3.24)', 'libglib2.0-0 (>= 2.56)', 'xdg-utils']
         size_kib = (sum(p.stat().st_size for p in stage.rglob('*') if p.is_file()) + 1023) // 1024
-        control = '\n'.join([f'Package: file-minnow', f'Version: {version}', 'Section: utils', 'Priority: optional', f'Architecture: {architecture}', f'Maintainer: {args.maintainer}', f'Installed-Size: {size_kib}', 'Depends: ' + ', '.join(dependencies), 'Recommends: dbus-user-session | dbus-x11, xdg-desktop-portal', 'Description: Instant file search for Linux (Everything alternative)', ' Finds files and folders as you type across millions of files, with a live', ' inotify index, native GTK interface, type filters, file manager actions,', ' global hotkey, tray icon and command-line search.', ' No service or autostart entry is enabled automatically.', ''])
+        control = '\n'.join([f'Package: file-minnow', f'Version: {version}', 'Section: utils', 'Priority: optional', f'Architecture: {architecture}', f'Maintainer: {args.maintainer}', f'Installed-Size: {size_kib}', 'Depends: ' + ', '.join(dependencies), 'Recommends: dbus-user-session | dbus-x11, xdg-desktop-portal', 'Description: Instant file search for Linux (Everything alternative)', ' Finds files and folders as you type across millions of files, with a live', ' inotify index, native GTK interface, type filters, file manager actions,', ' global hotkey, tray icon and command-line search.', ' The app starts in the tray at login; the background index service is not', ' enabled automatically.', ''])
         (control_dir / 'control').write_text(control)
         # No maintainer scripts: install/remove cannot start processes or alter user settings.
         deb = output / f'file-minnow_{version}_{architecture}.deb'

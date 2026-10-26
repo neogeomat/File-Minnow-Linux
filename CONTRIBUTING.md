@@ -26,7 +26,7 @@ your desktop:
 python3 scripts/test_ui.py --xvfb /path/to/Xvfb            # window, search, options, menus
 python3 scripts/test_ui.py --xvfb /path/to/Xvfb --tray     # tray, global shortcut, close to tray
 python3 scripts/test_ui.py --xvfb /path/to/Xvfb --tray --portal --daemon-first
-python3 scripts/test_ui.py --xvfb /path/to/Xvfb --confined  # as a snap: portals for open, show, trash
+python3 scripts/test_ui.py --xvfb /path/to/Xvfb --confined  # confined: portals for open, show, trash
 python3 scripts/test_focus.py --xvfb /path/to/Xvfb         # focus with Muffin as window manager
 python3 scripts/test_search_provider.py                     # GNOME Shell and KRunner search over D-Bus
 ```
@@ -34,9 +34,9 @@ python3 scripts/test_search_provider.py                     # GNOME Shell and KR
 They need `xdotool`, `xclip`, ImageMagick's `import`, and Python with `dbus` and `gi`.
 
 After changing the icon (`packaging/file-minnow.svg`), run `python3 scripts/render_icons.py`.
-It renders the PNG sizes the app embeds and the package installs, and updates the snap's
-copy. Keep the SVG to plain shapes and gradients: some renderers, such as store pages,
-drop elements that use SVG filters.
+It renders the PNG sizes the app embeds and the package installs. Keep the SVG to plain
+shapes and gradients: some renderers, such as store pages, drop elements that use SVG
+filters.
 
 ## Principles
 

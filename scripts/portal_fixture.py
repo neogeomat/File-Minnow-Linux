@@ -42,7 +42,7 @@ class Portal(dbus.service.Object):
     @dbus.service.method('org.freedesktop.DBus.Properties', in_signature='s', out_signature='a{sv}')
     def GetAll(self, interface):
         return {'version': dbus.UInt32(self.VERSIONS.get(interface, 2))}
-    # OpenURI and Trash, as a confined (snap) File Minnow uses them: the
+    # OpenURI and Trash, as a confined File Minnow uses them: the
     # file arrives as a descriptor; record the path it resolves to.
     def file_call(self, method, fd, options=None):
         number = fd.take()

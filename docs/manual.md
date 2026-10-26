@@ -16,16 +16,19 @@ while no window is open; the window attaches to it automatically.
 
 ## The window
 
-- **Columns.** Name, Path, Size, Modified, Type, Created and Items (the last two hidden
-  until you switch them on in the **View** menu). Click a header to sort and click again
-  to reverse. Names sort naturally, as file managers do: case and accents do not matter
+- **Columns.** Name, Path, Size, Modified, Type, Created, Run count and Items (Created,
+  Run count and Items hidden until you switch them on in the **View** menu). Results open
+  sorted by run count, most-used first: a column sort clicked during the session is not
+  carried over, and hiding then reopening the window from the tray restores count order.
+  Click a header to sort and click again to reverse. Names sort naturally, as file
+  managers do: case and accents do not matter
   and numbers sort by value (`IMG_2` before `IMG_10`). Type sorting puts folders first,
   then groups files by extension. Folders show the total size of the indexed files inside
   them, and Items counts the files and folders inside them at any depth: `folder:` sorted
   by size or items shows where the space goes. The creation date comes from the
   filesystem (ext4, Btrfs and XFS record it; some network and FUSE filesystems do not,
-  and the cell stays empty). Column widths, visibility, sort order, window size and
-  position are remembered.
+  and the cell stays empty). Column widths, visibility, window size and position are
+  remembered.
 - **Highlighting.** The parts of a name that matched your search are shown in bold.
 - **Type filter.** The drop-down beside the search box limits results to Audio,
   Compressed, Document, Folder, Picture or Video, followed by your own filters from
@@ -72,8 +75,7 @@ while no window is open; the window attaches to it automatically.
   the rename. The extension is kept unless you tick **Change the extension too**.
 - **Undo.** **Edit → Undo** (Ctrl+Z in the results) takes back File Minnow's own renames
   and moves to the Trash, the last one first. Items in the Trash are put back where they
-  were, as the freedesktop.org Trash specification describes. (The snap package moves
-  files to the Trash through the desktop portal and cannot put them back.)
+  were, as the freedesktop.org Trash specification describes.
 - **Browsing folders.** With **Options → Search → Open folders inside File Minnow**, Enter
   or a double-click on a folder lists what is in it (a `parent:` search), like a file
   manager: Backspace or Alt+Up goes to the parent folder, Alt+Left back. **Open
@@ -203,12 +205,12 @@ Cancel discards them.
   global show/hide shortcut. Escape cancels recording and Backspace clears the shortcut.
   If nothing happens, your desktop already uses that combination. On Cinnamon, check
   System Settings → Keyboard → Shortcuts.
-- **Interface.** Start at login (adds File Minnow to your desktop's startup applications,
-  starting in the tray), tray icon, close-to-tray, start hidden and theme. Below them,
+- **Interface.** Start at login (the `.deb` enables it, starting in the tray; untick it to
+  override for your account), tray icon, close-to-tray, start hidden and theme. Below them,
   **Search Here with File Minnow** can be added to (or removed from) the folder menu of
   each installed file manager, for your account only: GNOME Files (Nautilus), Nemo,
   Caja, Thunar and Dolphin. Thunar keeps your other custom actions. Thunar and Dolphin
-  may need a restart to show it. (Not available in the snap package.)
+  may need a restart to show it.
 
 Removing or excluding a folder never deletes files; it only removes them from the index.
 `/proc`, `/sys`, `/dev`, `/run` and File Minnow's own data folder are always skipped.
@@ -254,8 +256,8 @@ searches. It answers from the running File Minnow, or from the saved index when 
 Minnow is not running. Names that start with what you typed come first, then the most
 recently modified files. Choosing a result opens it; in KRunner, **Open Containing
 Folder** is offered too. Turn it off in GNOME Settings → Search, or in KDE's System
-Settings → Search → KRunner. The snap package and the portable archive do not install
-it (see [install.md](install.md)).
+Settings → Search → KRunner. The portable archive does not install it (see
+[install.md](install.md)).
 
 ## File lists
 

@@ -22,7 +22,6 @@ test -f /usr/share/nemo/actions/file-minnow-search-here.nemo_action
 test -f /usr/share/kio/servicemenus/file-minnow-search-here.desktop
 test -f /usr/share/doc/file-minnow/licenses/dependencies.json
 test ! -e /etc/systemd/user/default.target.wants/file-minnow.service
-test ! -e /root/.config/autostart/file-minnow.desktop
 mkdir -p /tmp/minnow-files
 printf 'fixture\n' > /tmp/minnow-files/invoice.pdf
 file-minnow --data-dir /tmp/minnow-cache index --root /tmp/minnow-files
@@ -30,6 +29,10 @@ test "$(file-minnow --data-dir /tmp/minnow-cache search ext:pdf)" = /tmp/minnow-
 settings_before=$(sha256sum /tmp/minnow-cache/settings.json)
 dpkg -i "$upgrade_package"
 test "$(sha256sum /tmp/minnow-cache/settings.json)" = "$settings_before"
+# Start in the tray at login, without touching any user's home folder.
+test -f /etc/xdg/autostart/file-minnow.desktop
+grep -q '^Exec=file-minnow gui --hidden$' /etc/xdg/autostart/file-minnow.desktop
+test ! -e /root/.config/autostart/file-minnow.desktop
 # Desktop search: GNOME Shell provider, KRunner plugin, D-Bus activation.
 test -f /usr/share/gnome-shell/search-providers/org.fileminnow.FileMinnow.search-provider.ini
 test -f /usr/share/krunner/dbusplugins/file-minnow.desktop
